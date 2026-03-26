@@ -570,7 +570,6 @@ async function loadAllData() {
   let query = sb.from('ai_analyses')
     .select('id, overall_score, executive_summary, created_at, seller_id, strengths, weaknesses, recommended_actions, score_abertura, score_empatia, score_clareza, score_persuasao, score_quebra_objecoes, score_conducao, score_fechamento, score_tom_de_voz, score_tempo_resposta, score_pressao, sellers(name)')
     .gte('created_at', since)
-    .not('seller_id', 'is', null)
     .not('overall_score', 'is', null)
     .order('created_at', { ascending: false });
 
