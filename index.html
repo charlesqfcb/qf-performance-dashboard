@@ -570,6 +570,7 @@ async function loadAllData() {
   let query = sb.from('ai_analyses')
     .select('id, overall_score, executive_summary, created_at, seller_id, strengths, weaknesses, recommended_actions, score_abertura, score_empatia, score_clareza, score_persuasao, score_quebra_objecoes, score_conducao, score_fechamento, score_tom_de_voz, score_tempo_resposta, score_pressao, sellers(name)')
     .gte('created_at', since)
+    .not('seller_id', 'is', null)
     .not('overall_score', 'is', null)
     .order('created_at', { ascending: false });
 
@@ -936,12 +937,24 @@ async function saveNewVersion() {
   const label = labelEl?.value?.trim();
   if (!label) { alert('Digite um nome para esta versão'); return; }
   const newPrompt = document.getElementById('system-prompt-editor').value;
-  const newCriteria = (activePromptVersion?.criteria||[]).map((c,i)=>({...c,label:document.getElementById('crit-label-'+i)?.value||c.label,description:document.getElementById('crit-desc-'+i)?.value||c.description,weight:parseFloat(document.getElementById('crit-weight-'+i)?.value)||c.weight}));
+  const newCriteria = (activePromptVersion?.criteria||[]).map((c,i)=>({
+    ...c,
+    label:       document.getElementById('crit-label-'+i)?.value||c.label,
+    description: document.getElementById('crit-desc-'+i)?.value||c.description,
+    weight:      parseFloat(document.getElementById('crit-weight-'+i)?.value)||c.weight
+  }));
   const nextVersion = Math.max(...PROMPT_VERSIONS.map(v=>v.version),0)+1;
-  const { error } = await sb.from('ai_prompt_configs').insert({ version:nextVersion, label, is_active:false, system_prompt:newPrompt, criteria:newCriteria, created_by:currentUser?.id||null, notes:'' });
-  if (error) { showToast('❌ Erro: '+error.message); return; }
+  const { data, error } = await sb
+    .from('ai_prompt_configs')
+    .insert({ version:nextVersion, label, is_active:false, system_prompt:newPrompt, criteria:newCriteria, notes:'' })
+    .select();
+  if (error) { 
+    alert('❌ Erro ao salvar: ' + error.message);
+    console.error('[saveNewVersion]', error);
+    return; 
+  }
   if (labelEl) labelEl.value = '';
-  showToast('💾 "'+label+'" salva!');
+  showToast('💾 "'+label+'" salva! Clique em Ativar quando quiser usar.');
   await renderIntelligenceTab();
 }
 
