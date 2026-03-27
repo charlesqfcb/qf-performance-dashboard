@@ -568,9 +568,8 @@ async function loadAllData() {
   SELLERS_DATA = (sellers || []).map((s, i) => ({ ...s, color: COLORS[i % COLORS.length], initials: s.name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase() }));
 
   let query = sb.from('ai_analyses')
-    .select('id, overall_score, executive_summary, created_at, seller_id, strengths, weaknesses, recommended_actions, score_abertura, score_empatia, score_clareza, score_persuasao, score_quebra_objecoes, score_conducao, score_fechamento, score_tom_de_voz, score_tempo_resposta, score_pressao, sellers(name)')
+    .select('id, overall_score, executive_summary, created_at, seller_id, strengths, weaknesses, recommended_actions, score_abertura, score_empatia, score_clareza, score_persuasao, score_quebra_objecoes, score_conducao, score_fechamento, score_tom_de_voz, score_tempo_resposta, score_pressao, sellers!ai_analyses_seller_id_fkey(name)')
     .gte('created_at', since)
-    .not('seller_id', 'is', null)
     .not('overall_score', 'is', null)
     .order('created_at', { ascending: false });
 
@@ -578,7 +577,8 @@ async function loadAllData() {
     query = query.eq('seller_id', currentProfile.seller_id);
   }
 
-  const { data: analyses } = await query;
+  const { data: analyses, error: analysesError } = await query;
+  console.log('[QF Debug] analyses retornados:', analyses?.length, '| error:', analysesError);
   ANALYSES_DATA = analyses || [];
 
   renderRanking();
