@@ -324,7 +324,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
         </div>
         <div class="card">
           <div class="card-header"><div class="card-title">💬 Conversas Analisadas</div><span class="card-sub">Últimas avaliações da IA</span></div>
-          <div class="scroll-table" style="max-height:400px;"><table class="conv-table"><thead><tr><th>Data</th><th>Cliente</th><th>Vendedor</th><th>Score</th><th>Resumo IA</th></tr></thead><tbody id="conv-tbody"><tr><td colspan="4" style="text-align:center;padding:30px;color:var(--text-muted);">Carregando...</td></tr></tbody></table></div>
+          <div class="scroll-table" style="max-height:400px;"><table class="conv-table"><thead><tr><th>Data</th><th>Nome</th><th>Telefone</th><th>Vendedor</th><th>Score</th><th>Resumo IA</th></tr></thead><tbody id="conv-tbody"><tr><td colspan="4" style="text-align:center;padding:30px;color:var(--text-muted);">Carregando...</td></tr></tbody></table></div>
         </div>
       </div>
 
@@ -694,10 +694,12 @@ function renderConversas() {
     const shortSummary = fullSummary.length > 120 ? fullSummary.substring(0, 120) + '...' : fullSummary;
     const analysisId = a.id;
     const lead = a.conversations?.leads;
-    const clientName = lead?.name || (lead?.phone ? lead.phone.replace('+55','') : '—');
+    const clientName = lead?.name || '—';
+    const clientPhone = lead?.phone ? lead.phone.replace('+55', '') : '—';
     return `<tr>
       <td style="font-size:11px;color:var(--text-muted);font-family:var(--mono);">${date}</td>
       <td style="font-size:12px;font-weight:500;">${clientName}</td>
+      <td style="font-size:11px;color:var(--text-muted);font-family:var(--mono);">${clientPhone}</td>
       <td><div class="seller-tag"><div class="seller-dot" style="background:${color};"></div>${sellerName}</div></td>
       <td><span class="score-pill ${pillClass(score)}">${score.toFixed(1)}</span></td>
       <td style="font-size:11px;max-width:400px;cursor:pointer;" onclick="toggleSummary('sum-${analysisId}', this)">
