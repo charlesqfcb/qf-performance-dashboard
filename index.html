@@ -679,28 +679,83 @@ function renderConversas() {
     return;
   }
 
-  document.getElementById('conv-tbody').innerHTML = ANALYSES_DATA.slice(0, 50).map(a => {
+  document.getElementById('conv-tbody').innerHTML = renderConversasPagina().map(a => {
     const sellerName = a.sellers?.name || 'Sem vendedor';
     const seller = SELLERS_DATA.find(s => s.name === sellerName);
     const color = seller?.color || '#60a5fa';
-    const date = new Date(a.created_at).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const dateObj = new Date(a.created_at);
+    const dateBRT = new Date(dateObj.getTime() - 3 * 60 * 60 * 1000);
+    const date = dateBRT.toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     const score = a.overall_score || 0;
-    const summary = (a.executive_summary || '—').substring(0, 100) + (a.executive_summary?.length > 100 ? '...' : '');
+    const fullSummary = a.executive_summary || '—';
+    const shortSummary = fullSummary.length > 120 ? fullSummary.substring(0, 120) + '...' : fullSummary;
+    const analysisId = a.id;
     return `<tr>
       <td style="font-size:11px;color:var(--text-muted);font-family:var(--mono);">${date}</td>
       <td><div class="seller-tag"><div class="seller-dot" style="background:${color};"></div>${sellerName}</div></td>
       <td><span class="score-pill ${pillClass(score)}">${score.toFixed(1)}</span></td>
-      <td style="font-size:11px;max-width:400px;">${summary}</td>
+      <td style="font-size:11px;max-width:400px;cursor:pointer;" onclick="toggleSummary('sum-${analysisId}', this)">
+        <span id="sum-${analysisId}" data-full="${fullSummary.replace(/"/g,'&quot;')}" data-short="${shortSummary.replace(/"/g,'&quot;')}" data-expanded="false">${shortSummary}</span>
+        ${fullSummary.length > 120 ? `<span style="color:var(--qf-green);font-size:10px;margin-left:4px;">ver mais</span>` : ''}
+      </td>
     </tr>`;
   }).join('');
+
+  // Paginação
+  renderPaginacao();
+}
+
+let convPage = 0;
+const CONV_PAGE_SIZE = 20;
+
+function renderConversasPagina() {
+  const start = convPage * CONV_PAGE_SIZE;
+  const pageData = ANALYSES_DATA.slice(start, start + CONV_PAGE_SIZE);
+  return pageData;
+}
+
+function renderPaginacao() {
+  const total = ANALYSES_DATA.length;
+  const totalPages = Math.ceil(total / CONV_PAGE_SIZE);
+  const existing = document.getElementById('conv-paginacao');
+  if (existing) existing.remove();
+
+  if (totalPages <= 1) return;
+
+  const nav = document.createElement('div');
+  nav.id = 'conv-paginacao';
+  nav.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border-top:1px solid var(--border);';
+  nav.innerHTML = `
+    <button onclick="mudarPagina(-1)" ${convPage===0?'disabled':''} style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-size:12px;">← Anterior</button>
+    <span style="font-size:12px;color:var(--text-muted);">Página ${convPage+1} de ${totalPages} (${total} análises)</span>
+    <button onclick="mudarPagina(1)" ${convPage>=totalPages-1?'disabled':''} style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-size:12px;">Próxima →</button>
+  `;
+  document.querySelector('.scroll-table').after(nav);
+}
+
+function mudarPagina(dir) {
+  const totalPages = Math.ceil(ANALYSES_DATA.length / CONV_PAGE_SIZE);
+  convPage = Math.max(0, Math.min(convPage + dir, totalPages - 1));
+  renderConversas();
+}
+
+function toggleSummary(id, cell) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const expanded = el.dataset.expanded === 'true';
+  el.textContent = expanded ? el.dataset.short : el.dataset.full;
+  el.dataset.expanded = !expanded;
+  const btn = cell.querySelector('span:last-child');
+  if (btn && btn !== el) btn.textContent = expanded ? 'ver mais' : 'ver menos';
 }
 
 // ── ANÁLISE IA ──
 function renderIASellerChips() {
-  const sellers = [...new Set(ANALYSES_DATA.filter(a=>a.sellers?.name).map(a=>a.sellers.name))];
   const chips = document.getElementById('ia-seller-chips');
+  // Inclui análises sem seller também
+  const sellers = [...new Set(ANALYSES_DATA.map(a => a.sellers?.name || 'Sem vendedor'))];
   if (sellers.length === 0) {
-    chips.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Aguardando avaliações vinculadas aos vendedores...</div>';
+    chips.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Nenhuma avaliação encontrada no período.</div>';
     return;
   }
   chips.innerHTML = sellers.map((name, i) => {
@@ -721,7 +776,7 @@ function selectIASeller(el, name) {
 }
 
 function loadIAForSeller(name) {
-  const analyses = ANALYSES_DATA.filter(a => a.sellers?.name === name);
+  const analyses = ANALYSES_DATA.filter(a => (a.sellers?.name || 'Sem vendedor') === name);
   const output = document.getElementById('ia-output');
   if (analyses.length === 0) {
     output.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">Sem avaliações</div><div class="empty-sub">Nenhuma conversa avaliada para este vendedor no período selecionado.</div></div>';
