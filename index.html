@@ -281,6 +281,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
           <button class="filter-btn" onclick="setFilter(this,30)">30 dias</button>
           <button class="filter-btn" onclick="setFilter(this,90)">90 dias</button>
         </div>
+        <button class="btn-logout" onclick="loadAllData()" style="margin-right:4px;" title="Atualizar dados agora">🔄</button>
         <button class="btn-logout" onclick="logout()">Sair</button>
       </div>
     </div>
@@ -323,7 +324,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
         </div>
         <div class="card">
           <div class="card-header"><div class="card-title">💬 Conversas Analisadas</div><span class="card-sub">Últimas avaliações da IA</span></div>
-          <div class="scroll-table" style="max-height:400px;"><table class="conv-table"><thead><tr><th>Data</th><th>Vendedor</th><th>Score</th><th>Resumo IA</th></tr></thead><tbody id="conv-tbody"><tr><td colspan="4" style="text-align:center;padding:30px;color:var(--text-muted);">Carregando...</td></tr></tbody></table></div>
+          <div class="scroll-table" style="max-height:400px;"><table class="conv-table"><thead><tr><th>Data</th><th>Cliente</th><th>Vendedor</th><th>Score</th><th>Resumo IA</th></tr></thead><tbody id="conv-tbody"><tr><td colspan="4" style="text-align:center;padding:30px;color:var(--text-muted);">Carregando...</td></tr></tbody></table></div>
         </div>
       </div>
 
@@ -521,6 +522,7 @@ function applyProfile(profile, user) {
 }
 
 async function logout() {
+  if (!confirm('Deseja sair do dashboard?')) return;
   await sb.auth.signOut();
   location.reload();
 }
@@ -568,7 +570,7 @@ async function loadAllData() {
   SELLERS_DATA = (sellers || []).map((s, i) => ({ ...s, color: COLORS[i % COLORS.length], initials: s.name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase() }));
 
   let query = sb.from('ai_analyses')
-    .select('id, overall_score, executive_summary, created_at, seller_id, strengths, weaknesses, recommended_actions, score_abertura, score_empatia, score_clareza, score_persuasao, score_quebra_objecoes, score_conducao, score_fechamento, score_tom_de_voz, score_tempo_resposta, score_pressao, sellers!ai_analyses_seller_id_fkey(name)')
+    .select('id, overall_score, executive_summary, created_at, seller_id, strengths, weaknesses, recommended_actions, score_abertura, score_empatia, score_clareza, score_persuasao, score_quebra_objecoes, score_conducao, score_fechamento, score_tom_de_voz, score_tempo_resposta, score_pressao, sellers!ai_analyses_seller_id_fkey(name), conversations!ai_analyses_conversation_id_fkey(leads(name, phone))')
     .gte('created_at', since)
     .not('overall_score', 'is', null)
     .order('created_at', { ascending: false });
@@ -584,6 +586,7 @@ async function loadAllData() {
   renderRanking();
   renderConversas();
   renderIASellerChips();
+  startAutoRefresh(); // inicia/reinicia o timer a cada carregamento
 }
 
 // ── RANKING ──
@@ -690,8 +693,11 @@ function renderConversas() {
     const fullSummary = a.executive_summary || '—';
     const shortSummary = fullSummary.length > 120 ? fullSummary.substring(0, 120) + '...' : fullSummary;
     const analysisId = a.id;
+    const lead = a.conversations?.leads;
+    const clientName = lead?.name || (lead?.phone ? lead.phone.replace('+55','') : '—');
     return `<tr>
       <td style="font-size:11px;color:var(--text-muted);font-family:var(--mono);">${date}</td>
+      <td style="font-size:12px;font-weight:500;">${clientName}</td>
       <td><div class="seller-tag"><div class="seller-dot" style="background:${color};"></div>${sellerName}</div></td>
       <td><span class="score-pill ${pillClass(score)}">${score.toFixed(1)}</span></td>
       <td style="font-size:11px;max-width:400px;cursor:pointer;" onclick="toggleSummary('sum-${analysisId}', this)">
@@ -1039,9 +1045,21 @@ function setFilter(btn, val) {
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   filterDays = val;
+  convPage = 0; // resetar paginação ao trocar filtro
   if (chartRadar) { chartRadar.destroy(); chartRadar = null; }
   if (chartBar) { chartBar.destroy(); chartBar = null; }
   loadAllData();
+}
+
+// ── AUTO-REFRESH ──
+let autoRefreshInterval = null;
+
+function startAutoRefresh() {
+  if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+  autoRefreshInterval = setInterval(() => {
+    console.log('[QF] Auto-refresh: atualizando dados...');
+    loadAllData();
+  }, 5 * 60 * 1000); // 5 minutos
 }
 
 // ── HELPERS ──
