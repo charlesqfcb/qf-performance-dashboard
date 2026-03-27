@@ -348,7 +348,18 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
         <div class="grid-65">
           <div class="card">
             <div class="card-header"><div class="card-title">🤖 Últimas Análises IA <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--qf-green-glow);color:var(--qf-green);border:1px solid rgba(23,183,134,0.3);letter-spacing:0.5px;text-transform:uppercase;">Claude Sonnet</span></div></div>
-            <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;" id="ia-seller-chips"></div>
+            <!-- Busca -->
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border);">
+              <input id="ia-search" type="text" placeholder="🔍 Buscar por nome, telefone, vendedor ou resumo IA..." oninput="filterIAAnalyses()" style="width:100%;box-sizing:border-box;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px;font-family:var(--font);outline:none;" />
+            </div>
+            <!-- Chips de vendedores -->
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;" id="ia-seller-chips"></div>
+            <!-- Navegação anterior/próxima -->
+            <div id="ia-nav" style="display:none;padding:10px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+              <button onclick="iaNavegar(-1)" id="ia-btn-prev" style="padding:4px 14px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-size:12px;font-family:var(--font);">← Anterior</button>
+              <span id="ia-nav-label" style="font-size:12px;color:var(--text-muted);"></span>
+              <button onclick="iaNavegar(1)" id="ia-btn-next" style="padding:4px 14px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-size:12px;font-family:var(--font);">Próxima →</button>
+            </div>
             <div style="padding:20px;min-height:200px;max-height:420px;overflow-y:auto;" id="ia-output">
               <div class="empty-state"><div class="empty-icon">🤖</div><div class="empty-title">Aguardando avaliações</div><div class="empty-sub">As análises aparecerão aqui conforme a IA avaliar as conversas dos vendedores.</div></div>
             </div>
@@ -758,6 +769,91 @@ function toggleSummary(id, cell) {
 }
 
 // ── ANÁLISE IA ──
+let iaCurrentSeller = null;   // vendedor selecionado
+let iaFilteredData  = [];     // análises do vendedor atual (com busca aplicada)
+let iaCurrentIndex  = 0;      // índice da análise sendo exibida
+
+function filterIAAnalyses() {
+  if (!iaCurrentSeller) return;
+  const q = (document.getElementById('ia-search')?.value || '').toLowerCase().trim();
+  const sellerAnalyses = ANALYSES_DATA.filter(a => (a.sellers?.name || 'Sem vendedor') === iaCurrentSeller);
+
+  if (!q) {
+    iaFilteredData = sellerAnalyses;
+  } else {
+    iaFilteredData = sellerAnalyses.filter(a => {
+      const lead = a.conversations?.leads;
+      const nome    = (lead?.name || '').toLowerCase();
+      const telefone= (lead?.phone || '').toLowerCase();
+      const vendedor= (a.sellers?.name || '').toLowerCase();
+      const resumo  = (a.executive_summary || '').toLowerCase();
+      return nome.includes(q) || telefone.includes(q) || vendedor.includes(q) || resumo.includes(q);
+    });
+  }
+
+  iaCurrentIndex = 0;
+  renderIAAnalise();
+}
+
+function iaNavegar(dir) {
+  iaCurrentIndex = Math.max(0, Math.min(iaCurrentIndex + dir, iaFilteredData.length - 1));
+  renderIAAnalise();
+}
+
+function renderIAAnalise() {
+  const output = document.getElementById('ia-output');
+  const nav    = document.getElementById('ia-nav');
+
+  if (iaFilteredData.length === 0) {
+    output.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">Nenhum resultado</div><div class="empty-sub">Tente buscar por outro termo.</div></div>';
+    if (nav) nav.style.display = 'none';
+    return;
+  }
+
+  // Navegação
+  if (nav) {
+    nav.style.display = 'flex';
+    document.getElementById('ia-nav-label').textContent = `${iaCurrentIndex + 1} de ${iaFilteredData.length} análises`;
+    document.getElementById('ia-btn-prev').disabled = iaCurrentIndex === 0;
+    document.getElementById('ia-btn-next').disabled = iaCurrentIndex === iaFilteredData.length - 1;
+  }
+
+  const a     = iaFilteredData[iaCurrentIndex];
+  const score = a.overall_score || 0;
+  const seller= SELLERS_DATA.find(s => s.name === iaCurrentSeller);
+  const color = seller?.color || 'var(--qf-green)';
+  const lead  = a.conversations?.leads;
+  const clientInfo = lead?.name || (lead?.phone ? lead.phone.replace('+55','') : '—');
+
+  // Data da análise
+  const dateObj = new Date(a.created_at);
+  const dateBRT = new Date(dateObj.getTime() - 3 * 60 * 60 * 1000);
+  const dateStr = dateBRT.toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  output.innerHTML = `
+    <div style="display:flex;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);">
+      <div style="min-width:100px;">
+        <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Score IA</div>
+        <div style="font-size:52px;font-weight:900;font-family:var(--mono);color:${color};line-height:1;">${score.toFixed(1)}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${iaCurrentSeller}</div>
+        <div style="font-size:11px;color:var(--qf-green);margin-top:2px;">👤 ${clientInfo}</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">🕐 ${dateStr}</div>
+      </div>
+      <div style="flex:1;"><div style="font-size:13px;color:var(--text-dim);line-height:1.6;padding:14px;background:var(--bg3);border-radius:var(--radius-sm);border:1px solid var(--border);">${a.executive_summary || 'Sem resumo disponível.'}</div></div>
+    </div>
+    ${a.strengths?.length ? `<div style="margin-bottom:16px;"><div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">✅ Pontos Fortes</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${a.strengths.map(p=>`<div style="font-size:11px;font-weight:500;padding:4px 10px;border-radius:6px;background:rgba(23,183,134,0.1);color:var(--qf-green);border:1px solid rgba(23,183,134,0.2);">${p}</div>`).join('')}</div></div>` : ''}
+    ${a.weaknesses?.length ? `<div style="margin-bottom:16px;"><div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">⚠️ A Melhorar</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${a.weaknesses.map(p=>`<div style="font-size:11px;font-weight:500;padding:4px 10px;border-radius:6px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.2);">${p}</div>`).join('')}</div></div>` : ''}
+    ${a.recommended_actions?.length ? `<div style="margin-bottom:16px;"><div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🚀 Ações</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${a.recommended_actions.map(p=>`<div style="font-size:11px;font-weight:500;padding:4px 10px;border-radius:6px;background:rgba(255,210,14,0.1);color:var(--qf-yellow);border:1px solid rgba(255,210,14,0.2);">${p}</div>`).join('')}</div></div>` : ''}
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+      <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">📊 Critérios</div>
+      ${CRITERIA_KEYS.map((k,i) => {
+        const v = a['score_'+k];
+        if (v == null) return '';
+        return `<div class="crit-detail-item"><div class="crit-detail-name">${CRITERIA_LABELS[i]}</div><div class="crit-detail-bar-bg"><div class="crit-detail-bar-fill" style="width:${v*10}%;background:${barColor(v)};"></div></div><div class="crit-detail-val ${scoreClass(v)}">${v.toFixed(1)}</div></div>`;
+      }).join('')}
+    </div>`;
+}
+
 function renderIASellerChips() {
   const chips = document.getElementById('ia-seller-chips');
   // Inclui análises sem seller também
@@ -771,7 +867,7 @@ function renderIASellerChips() {
     const color = seller?.color || '#60a5fa';
     return `<div class="seller-chip ${i===0?'active':''}" onclick="selectIASeller(this,'${name}')" style="${i===0?`border-color:${color};color:${color};background:${color}15;`:''}">${name.split(' ')[0]}</div>`;
   }).join('');
-  if (sellers.length > 0) loadIAForSeller(sellers[0]);
+  if (sellers.length > 0) setIASeller(sellers[0]);
 }
 
 function selectIASeller(el, name) {
@@ -780,41 +876,20 @@ function selectIASeller(el, name) {
   const seller = SELLERS_DATA.find(s => s.name === name);
   const color = seller?.color || '#60a5fa';
   el.style.cssText = `border-color:${color};color:${color};background:${color}15;`;
-  loadIAForSeller(name);
+  setIASeller(name);
+}
+
+function setIASeller(name) {
+  iaCurrentSeller = name;
+  iaCurrentIndex  = 0;
+  // Limpar busca ao trocar vendedor
+  const searchEl = document.getElementById('ia-search');
+  if (searchEl) searchEl.value = '';
+  filterIAAnalyses();
 }
 
 function loadIAForSeller(name) {
-  const analyses = ANALYSES_DATA.filter(a => (a.sellers?.name || 'Sem vendedor') === name);
-  const output = document.getElementById('ia-output');
-  if (analyses.length === 0) {
-    output.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">Sem avaliações</div><div class="empty-sub">Nenhuma conversa avaliada para este vendedor no período selecionado.</div></div>';
-    return;
-  }
-  const latest = analyses[0];
-  const score = latest.overall_score || 0;
-  const seller = SELLERS_DATA.find(s => s.name === name);
-  const color = seller?.color || 'var(--qf-green)';
-  output.innerHTML = `
-    <div style="display:flex;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);">
-      <div>
-        <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Score IA</div>
-        <div style="font-size:52px;font-weight:900;font-family:var(--mono);color:${color};line-height:1;">${score.toFixed(1)}</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${name}</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${analyses.length} avaliações</div>
-      </div>
-      <div style="flex:1;"><div style="font-size:13px;color:var(--text-dim);line-height:1.6;padding:14px;background:var(--bg3);border-radius:var(--radius-sm);border:1px solid var(--border);">${latest.executive_summary || 'Sem resumo disponível.'}</div></div>
-    </div>
-    ${latest.strengths?.length ? `<div style="margin-bottom:16px;"><div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">✅ Pontos Fortes</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${latest.strengths.map(p=>`<div style="font-size:11px;font-weight:500;padding:4px 10px;border-radius:6px;background:rgba(23,183,134,0.1);color:var(--qf-green);border:1px solid rgba(23,183,134,0.2);">${p}</div>`).join('')}</div></div>` : ''}
-    ${latest.weaknesses?.length ? `<div style="margin-bottom:16px;"><div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">⚠️ A Melhorar</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${latest.weaknesses.map(p=>`<div style="font-size:11px;font-weight:500;padding:4px 10px;border-radius:6px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.2);">${p}</div>`).join('')}</div></div>` : ''}
-    ${latest.recommended_actions?.length ? `<div style="margin-bottom:16px;"><div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🚀 Ações</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${latest.recommended_actions.map(p=>`<div style="font-size:11px;font-weight:500;padding:4px 10px;border-radius:6px;background:rgba(255,210,14,0.1);color:var(--qf-yellow);border:1px solid rgba(255,210,14,0.2);">${p}</div>`).join('')}</div></div>` : ''}
-    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
-      <div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">📊 Critérios</div>
-      ${CRITERIA_KEYS.map((k,i) => {
-        const v = latest['score_'+k];
-        if (v == null) return '';
-        return `<div class="crit-detail-item"><div class="crit-detail-name">${CRITERIA_LABELS[i]}</div><div class="crit-detail-bar-bg"><div class="crit-detail-bar-fill" style="width:${v*10}%;background:${barColor(v)};"></div></div><div class="crit-detail-val ${scoreClass(v)}">${v.toFixed(1)}</div></div>`;
-      }).join('')}
-    </div>`;
+  setIASeller(name);
 }
 
 // ── CRITÉRIOS ──
